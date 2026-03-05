@@ -1,0 +1,121 @@
+
+# 1 - demuxing of modalities (3 Tn5 barcodes)
+
+mkdir demux
+
+module load nano
+
+nano split_tn5.py
+-----------------
+#!/usr/bin/env python3
+import gzip, io, argparse, os
+from collections import defaultdict
+
+BARCODE_MAP = {
+    "GTGATGCT": "4_K27m3",
+    "CCTATAGC": "4_K27ac",
+    "GTACATGC": "4_K4m3",
+}
+
+def read_fastq_gz(path):
+    with gzip.open(path, "rb") as gz:
+        with io.TextIOWrapper(gz, encoding="utf-8", newline="") as fh:
+            while True:
+                h = fh.readline()
+                if not h: break
+                s = fh.readline(); p = fh.readline(); q = fh.readline()
+                if not q: break
+                yield h.rstrip("\n"), s.rstrip("\n"), p.rstrip("\n"), q.rstrip("\n")
+
+def write_pair(outdir, label, r1rec, r2rec, writers):
+    if label not in writers:
+        os.makedirs(outdir, exist_ok=True)
+        writers[label] = (
+            gzip.open(os.path.join(outdir, f"{label}_R1.fq.gz"), "wt"),
+            gzip.open(os.path.join(outdir, f"{label}_R2.fq.gz"), "wt"),
+        )
+    w1, w2 = writers[label]
+    h1,s1,p1,q1 = r1rec
+    h2,s2,p2,q2 = r2rec
+    w1.write(f"{h1}\n{s1}\n{p1}\n{q1}\n")
+    w2.write(f"{h2}\n{s2}\n{p2}\n{q2}\n")
+
+def main():
+    ap = argparse.ArgumentParser("Split paired FASTQs into 3 bins by Tn5 barcode (first 8 nt of R1).")
+    ap.add_argument("-r1", required=True)
+    ap.add_argument("-r2", required=True)
+    ap.add_argument("-o", "--outdir", required=True)
+    ap.add_argument("--unassigned", action="store_true", help="also write unassigned pairs")
+    ap.add_argument("--max-pairs", type=int, default=0, help="debug: process only N pairs")
+    args = ap.parse_args()
+
+    r1_it = read_fastq_gz(args.r1)
+    r2_it = read_fastq_gz(args.r2)
+    writers, counts = {}, defaultdict(int)
+
+    n = 0
+    for r1rec, r2rec in zip(r1_it, r2_it):
+        n += 1
+        bc8 = r1rec[1][:8] if len(r1rec[1]) >= 8 else ""
+        label = BARCODE_MAP.get(bc8, "unassigned")
+        if label == "unassigned" and not args.unassigned:
+            counts["unassigned"] += 1  # counted, not written
+        else:
+            write_pair(args.outdir, label, r1rec, r2rec, writers)
+            counts[label] += 1
+        if args.max_pairs and n >= args.max_pairs:
+            break
+
+        if n % 1_000_000 == 0:
+            print(f"processed_pairs\t{n}", file=__import__("sys").stderr)
+
+    for w1, w2 in writers.values():
+        w1.close(); w2.close()
+
+    import sys
+    for k in sorted(counts):
+        print(f"{k}\t{counts[k]}", file=sys.stderr)
+    print(f"total_pairs\t{n}", file=sys.stderr)
+
+if __name__ == "__main__":
+    main()
+-----------------
+
+nano demux_tn5_py.sbatch
+-----------------
+#!/bin/bash -l
+#SBATCH -A naiss2025-22-612
+#SBATCH -J demux_tn5_py
+#SBATCH -p shared
+#SBATCH -n 1
+#SBATCH --mem=32G
+#SBATCH -t 4:00:00
+#SBATCH -o demux_tn5_py_%j.out
+#SBATCH -e demux_tn5_py_%j.err
+set -euo pipefail
+
+python3 split_tn5.py \
+  -r1 K27me3_ac_K4me3_R1.fq.gz \
+  -r2 K27me3_ac_K4me3_R2.fq.gz \
+  -o demux --unassigned
+
+-------------------
+sbatch demux_tn5_py.sbatch
+
+## Trim (first 27 bases - 8nt barcode + 19 ME) and aling 
+
+mkdir /cfs/klemming/scratch/p/phunold/MaMuPlex/sam
+
+sbatch -A naiss2025-22-612 -t 12:00:00 -J align_all -p shared -n 16 --wrap="module load bowtie2/2.5.4; \
+ref=/cfs/klemming/projects/snic/snic2022-23-547/references/bowtie2/GRCh38_noalt_as/GRCh38_noalt_as; \
+out=/cfs/klemming/scratch/p/phunold/MaMuPlex/sam; \
+mkdir -p \$out; \
+for r1 in *_R1.fq.gz; do \
+  prefix=\${r1%_R1.fq.gz}; \
+  r2=\${prefix}_R2.fq.gz; \
+  echo \"Aligning \$prefix\"; \
+  zcat \"\$r1\" | awk 'NR%4==1{h=\$0} NR%4==2{s=substr(\$0,28)} NR%4==3{p=\$0} NR%4==0{q=substr(\$0,28); print h\"\\n\"s\"\\n\"p\"\\n\"q}' | gzip > \"\$prefix.__R1trim.fq.gz\"; \
+  bowtie2 --end-to-end --very-sensitive --no-mixed --no-discordant -p 16 -I 10 -X 700 -x \"\$ref\" -1 \"\$prefix.__R1trim.fq.gz\" -2 \"\$r2\" -S \"\$out/\$prefix.sam\"; \
+  rm -f \"\$prefix.__R1trim.fq.gz\"; \
+done"
+

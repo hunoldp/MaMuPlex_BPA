@@ -119,3 +119,28 @@ for r1 in *_R1.fq.gz; do \
   rm -f \"\$prefix.__R1trim.fq.gz\"; \
 done"
 
+## SAM to BAM conversion
+
+for f1 in *.sam; do
+sbatch -A naiss2025-22-612 -p shared -J StoB --mem 8GB -t 2:00:00 --wrap "module load samtools/1.20 && samtools view -bS -F 0x04 "$f1" > /cfs/klemming/scratch/p/phunold/MaMuPlex/bam/${f1%%}.bam"
+done
+
+## BAM sort
+for f in *.bam; do
+sbatch -A naiss2025-22-612 -p shared --mem 8G -t 1:00:00 -J samSort --cpus-per-task 8 --wrap "module load samtools/1.20 && samtools sort -@ 8 $f > ${f%%.bam}.sort.bam"
+done
+
+## BAM index
+for f1 in *.sort.bam; do
+sbatch -A naiss2025-22-612 -p shared --mem 8G -t 1:00:00 -J BAMindex --wrap "module load samtools/1.20 && samtools index $f1"
+done
+
+
+## Activate Conca Environment for Deeptools
+conda activate /cfs/klemming/projects/snic/snic2022-23-547/marek/miniconda3/envs/deeptools/
+[if no conda found; source from here [source /cfs/klemming/projects/snic/snic2022-23-547/marek/miniconda3/etc/profile.d/conda.sh]]
+
+## Generate BW
+for f1 in *.sort.bam; do
+sbatch -A naiss2025-22-612 -p shared --mem 8G -t 1:00:00 -J BAM2BW --wrap "deeptools && bamCoverage -p 8 -b $f1 -bs 10 --skipNAs --centerReads --normalizeUsing CPM -of bigwig -o ./${f1%%.sort.bam}_cpm.bw "
+done

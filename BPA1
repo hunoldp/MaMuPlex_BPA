@@ -156,6 +156,16 @@ sbatch -A naiss2025-22-612 -p shared --mem 16G -t 2:00:00 -J mBS --wrap  "deepto
 sbatch -A naiss2025-22-612 -p shared --mem 16G -t 2:00:00 -J mBS --wrap  "deeptools && multiBigwigSummary bins -bs 1000 -b 2_K27ac.sam_cpm.bw 3_K27ac.sam_cpm.bw -p 8 -o 2_Kac_vs_3_Kac.npz"
 sbatch -A naiss2025-22-612 -p shared --mem 16G -t 2:00:00 -J mBS --wrap  "deeptools && multiBigwigSummary bins -bs 1000 -b 2_K27ac.sam_cpm.bw 4_K27ac.sam_cpm.bw -p 8 -o 2_Kac_vs_4_Kac.npz"
 
+sbatch -A naiss2025-22-612 -p shared --mem 16G -t 2:00:00 -J mBS --wrap  "deeptools && multiBigwigSummary bins -bs 1000 -b 1_K27m3.sam_cpm.bw 4_K4m3.sam_cpm.bw -p 8 -o 1_Km_vs_4_K4m.npz"
+sbatch -A naiss2025-22-612 -p shared --mem 16G -t 2:00:00 -J mBS --wrap  "deeptools && multiBigwigSummary bins -bs 1000 -b 2_K27ac.sam_cpm.bw 4_K4m3.sam_cpm.bw -p 8 -o 2_Kac_vs_4_K4m.npz"
+
+sbatch -A naiss2025-22-612 -p shared --mem 16G -t 2:00:00 -J mBS --wrap  "deeptools && multiBigwigSummary bins -bs 1000 -b 4_K27m3.sam_cpm.bw 4_K4m3.sam_cpm.bw -p 8 -o 4_Km_vs_4_K4m.npz"
+sbatch -A naiss2025-22-612 -p shared --mem 16G -t 2:00:00 -J mBS --wrap  "deeptools && multiBigwigSummary bins -bs 1000 -b 4_K27ac.sam_cpm.bw 4_K4m3.sam_cpm.bw -p 8 -o 4_Kac_vs_4_K4m.npz"
+
+
+
+
+
 
 sbatch -A naiss2025-22-612 -p shared --mem 32G -t 2:00:00 -J pCorr --wrap  "deeptools && plotCorrelation -in 1_Km_vs_2_Kac.npz --corMethod pearson --skipZeros --removeOutliers --whatToPlot scatterplot -o 1_Km_vs_2_Kac_plotCorr.pdf"
 sbatch -A naiss2025-22-612 -p shared --mem 32G -t 2:00:00 -J pCorr --wrap  "deeptools && plotCorrelation -in 3_Km_vs_3_Kac.npz --corMethod pearson --skipZeros --removeOutliers --whatToPlot scatterplot -o 3_Km_vs_3_Kac_plotCorr.pdf"
@@ -168,6 +178,10 @@ sbatch -A naiss2025-22-612 -p shared --mem 32G -t 2:00:00 -J pCorr --wrap  "deep
 sbatch -A naiss2025-22-612 -p shared --mem 32G -t 2:00:00 -J pCorr --wrap  "deeptools && plotCorrelation -in 2_Kac_vs_4_Kac.npz --corMethod pearson --skipZeros --removeOutliers --whatToPlot scatterplot -o 2_Kac_vs_4_Kac_plotCorr.pdf"
 
 
+sbatch -A naiss2025-22-612 -p shared --mem 32G -t 2:00:00 -J pCorr --wrap  "deeptools && plotCorrelation -in 1_Km_vs_4_K4m.npz --corMethod pearson --skipZeros --removeOutliers --whatToPlot scatterplot -o 1_Km_vs_4_K4m_plotCorr.pdf"
+sbatch -A naiss2025-22-612 -p shared --mem 32G -t 2:00:00 -J pCorr --wrap  "deeptools && plotCorrelation -in 2_Kac_vs_4_K4m.npz --corMethod pearson --skipZeros --removeOutliers --whatToPlot scatterplot -o 2_Kac_vs_4_K4m_plotCorr.pdf"
+sbatch -A naiss2025-22-612 -p shared --mem 32G -t 2:00:00 -J pCorr --wrap  "deeptools && plotCorrelation -in 4_Km_vs_4_K4m.npz --corMethod pearson --skipZeros --removeOutliers --whatToPlot scatterplot -o 4_Km_vs_4_K4m_plotCorr.pdf"
+sbatch -A naiss2025-22-612 -p shared --mem 32G -t 2:00:00 -J pCorr --wrap  "deeptools && plotCorrelation -in 4_Kac_vs_4_K4m.npz --corMethod pearson --skipZeros --removeOutliers --whatToPlot scatterplot -o 4_Kac_vs_4_K4m_plotCorr.pdf"
 
 
 

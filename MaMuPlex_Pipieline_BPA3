@@ -1,8 +1,8 @@
-cd /cfs/klemming/scratch/p/phunold/BPA2
+cd /cfs/klemming/scratch/p/phunold/BPA3
 mkdir -p scripts analysis/logs
 
 ---
-cat > /cfs/klemming/scratch/p/phunold/BPA2/scripts/demux_exact_r1_barcode.py <<'EOF'
+cat > /cfs/klemming/scratch/p/phunold/BPA3/scripts/demux_exact_r1_barcode.py <<'EOF'
 #!/usr/bin/env python3
 import argparse
 import gzip
@@ -79,12 +79,12 @@ EOF
 
 ------
 
-chmod +x /cfs/klemming/scratch/p/phunold/BPA2/scripts/demux_exact_r1_barcode.py
+chmod +x /cfs/klemming/scratch/p/phunold/BPA3/scripts/demux_exact_r1_barcode.py
 
 
 ------
 
-cat > /cfs/klemming/scratch/p/phunold/BPA2/scripts/run_mamuplex_pipeline.sh <<'EOF'
+cat > /cfs/klemming/scratch/p/phunold/BPA3/scripts/run_mamuplex_pipeline.sh <<'EOF'
 #!/bin/bash -l
 #SBATCH -A naiss2025-22-612
 #SBATCH -J MaMuPlex_Pipe
@@ -92,8 +92,8 @@ cat > /cfs/klemming/scratch/p/phunold/BPA2/scripts/run_mamuplex_pipeline.sh <<'E
 #SBATCH -c 8
 #SBATCH --mem=64G
 #SBATCH -t 12:00:00
-#SBATCH -o /cfs/klemming/scratch/p/phunold/BPA2/analysis/logs/MaMuPlex_Pipe_%j.out
-#SBATCH -e /cfs/klemming/scratch/p/phunold/BPA2/analysis/logs/MaMuPlex_Pipe_%j.err
+#SBATCH -o /cfs/klemming/scratch/p/phunold/BPA3/analysis/logs/MaMuPlex_Pipe_%j.out
+#SBATCH -e /cfs/klemming/scratch/p/phunold/BPA3/analysis/logs/MaMuPlex_Pipe_%j.err
 
 set -euo pipefail
 
@@ -107,10 +107,10 @@ conda activate /cfs/klemming/projects/snic/snic2022-23-547/marek/miniconda3/envs
 
 THREADS=${SLURM_CPUS_PER_TASK:-8}
 
-FASTQ_DIR="/cfs/klemming/scratch/p/phunold/BPA2/fastq"
-OUTDIR="/cfs/klemming/scratch/p/phunold/BPA2/analysis"
+FASTQ_DIR="/cfs/klemming/scratch/p/phunold/BPA3/fastq"
+OUTDIR="/cfs/klemming/scratch/p/phunold/BPA3/analysis"
 REF="/cfs/klemming/projects/snic/snic2022-23-547/references/bowtie2/GRCh38_noalt_as/GRCh38_noalt_as"
-DEMUX_SCRIPT="/cfs/klemming/scratch/p/phunold/BPA2/scripts/demux_exact_r1_barcode.py"
+DEMUX_SCRIPT="/cfs/klemming/scratch/p/phunold/BPA3/scripts/demux_exact_r1_barcode.py"
 
 mkdir -p \
   "${OUTDIR}/demux" \
@@ -256,7 +256,7 @@ EOF
 
 -----
 
-chmod +x /cfs/klemming/scratch/p/phunold/BPA2/scripts/run_mamuplex_pipeline.sh
+chmod +x /cfs/klemming/scratch/p/phunold/BPA3/scripts/run_mamuplex_pipeline.sh
 
 ------
-sbatch /cfs/klemming/scratch/p/phunold/BPA2/scripts/run_mamuplex_pipeline.sh
+sbatch /cfs/klemming/scratch/p/phunold/BPA3/scripts/run_mamuplex_pipeline.sh

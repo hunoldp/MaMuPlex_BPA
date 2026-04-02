@@ -1,1 +1,262 @@
+cd /cfs/klemming/scratch/p/phunold/BPA4
+mkdir -p scripts analysis/logs
 
+---
+cat > /cfs/klemming/scratch/p/phunold/BPA4/scripts/demux_exact_r1_barcode.py <<'EOF'
+#!/usr/bin/env python3
+import argparse
+import gzip
+import os
+
+BARCODES = {
+    "GTGATGCT": "H3K27m3",
+    "CCTATAGC": "H3K27ac",
+}
+
+def gzopen(path, mode):
+    return gzip.open(path, mode)
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--r1", required=True)
+    ap.add_argument("--r2", required=True)
+    ap.add_argument("--sample", required=True)
+    ap.add_argument("--outdir", required=True)
+    ap.add_argument("--summary", required=True)
+    args = ap.parse_args()
+
+    os.makedirs(args.outdir, exist_ok=True)
+    os.makedirs(os.path.dirname(args.summary), exist_ok=True)
+
+    counts = {name: 0 for name in BARCODES.values()}
+    counts["unassigned"] = 0
+
+    handles = {}
+    for modality in list(BARCODES.values()) + ["unassigned"]:
+        r1_out = os.path.join(args.outdir, f"{args.sample}_{modality}_R1.fastq.gz")
+        r2_out = os.path.join(args.outdir, f"{args.sample}_{modality}_R2.fastq.gz")
+        handles[modality] = (
+            gzopen(r1_out, "wt"),
+            gzopen(r2_out, "wt"),
+        )
+
+    with gzopen(args.r1, "rt") as f1, gzopen(args.r2, "rt") as f2:
+        while True:
+            h1 = f1.readline()
+            if not h1:
+                break
+            s1 = f1.readline()
+            p1 = f1.readline()
+            q1 = f1.readline()
+
+            h2 = f2.readline()
+            s2 = f2.readline()
+            p2 = f2.readline()
+            q2 = f2.readline()
+
+            bc = s1[:8]
+            modality = BARCODES.get(bc, "unassigned")
+            counts[modality] += 1
+
+            out1, out2 = handles[modality]
+            out1.write(h1); out1.write(s1); out1.write(p1); out1.write(q1)
+            out2.write(h2); out2.write(s2); out2.write(p2); out2.write(q2)
+
+    for out1, out2 in handles.values():
+        out1.close()
+        out2.close()
+
+    with open(args.summary, "w") as out:
+        out.write("sample\tmodality\tread_pairs\n")
+        for modality in ["H3K27m3", "H3K27ac", "unassigned"]:
+            out.write(f"{args.sample}\t{modality}\t{counts[modality]}\n")
+
+if __name__ == "__main__":
+    main()
+EOF
+
+
+
+------
+
+chmod +x /cfs/klemming/scratch/p/phunold/BPA4/scripts/demux_exact_r1_barcode.py
+
+
+------
+
+cat > /cfs/klemming/scratch/p/phunold/BPA4/scripts/run_mamuplex_pipeline.sh <<'EOF'
+#!/bin/bash -l
+#SBATCH -A naiss2025-22-612
+#SBATCH -J MaMuPlex_Pipe
+#SBATCH -p shared
+#SBATCH -c 8
+#SBATCH --mem=64G
+#SBATCH -t 12:00:00
+#SBATCH -o /cfs/klemming/scratch/p/phunold/BPA4/analysis/logs/MaMuPlex_Pipe_%j.out
+#SBATCH -e /cfs/klemming/scratch/p/phunold/BPA4/analysis/logs/MaMuPlex_Pipe_%j.err
+
+set -euo pipefail
+
+module load cutadapt/5.1
+module load bowtie2/2.5.4
+module load samtools/1.20
+module load bedtools/2.31.0
+
+source /cfs/klemming/projects/snic/snic2022-23-547/marek/miniconda3/etc/profile.d/conda.sh
+conda activate /cfs/klemming/projects/snic/snic2022-23-547/marek/miniconda3/envs/deeptools/
+
+THREADS=${SLURM_CPUS_PER_TASK:-8}
+
+FASTQ_DIR="/cfs/klemming/scratch/p/phunold/BPA4/fastq"
+OUTDIR="/cfs/klemming/scratch/p/phunold/BPA4/analysis"
+REF="/cfs/klemming/projects/snic/snic2022-23-547/references/bowtie2/GRCh38_noalt_as/GRCh38_noalt_as"
+DEMUX_SCRIPT="/cfs/klemming/scratch/p/phunold/BPA4/scripts/demux_exact_r1_barcode.py"
+
+mkdir -p \
+  "${OUTDIR}/demux" \
+  "${OUTDIR}/trimmed" \
+  "${OUTDIR}/bam" \
+  "${OUTDIR}/bigwig" \
+  "${OUTDIR}/bins_10kb" \
+  "${OUTDIR}/counts" \
+  "${OUTDIR}/tmp" \
+  "${OUTDIR}/logs"
+
+GLOBAL_COUNTS="${OUTDIR}/counts/modality_read_counts.tsv"
+echo -e "sample\tmodality\tread_pairs" > "${GLOBAL_COUNTS}"
+
+for R1 in ${FASTQ_DIR}/Sample_*_L01_R1.fastq.gz; do
+    SAMPLE=$(basename "${R1}" _L01_R1.fastq.gz)
+    R2="${FASTQ_DIR}/${SAMPLE}_L01_R2.fastq.gz"
+
+    echo "==== Processing ${SAMPLE} ===="
+
+    SAMPLE_DEMUX="${OUTDIR}/demux/${SAMPLE}"
+    SAMPLE_TRIM="${OUTDIR}/trimmed/${SAMPLE}"
+    SAMPLE_BAM="${OUTDIR}/bam/${SAMPLE}"
+    SAMPLE_BW="${OUTDIR}/bigwig/${SAMPLE}"
+    SAMPLE_BINS="${OUTDIR}/bins_10kb/${SAMPLE}"
+    SAMPLE_COUNTS="${OUTDIR}/counts/${SAMPLE}"
+    SAMPLE_TMP="${OUTDIR}/tmp/${SAMPLE}"
+
+    mkdir -p \
+      "${SAMPLE_DEMUX}" \
+      "${SAMPLE_TRIM}" \
+      "${SAMPLE_BAM}" \
+      "${SAMPLE_BW}" \
+      "${SAMPLE_BINS}" \
+      "${SAMPLE_COUNTS}" \
+      "${SAMPLE_TMP}"
+
+    SAMPLE_SUMMARY="${SAMPLE_COUNTS}/${SAMPLE}.demux_counts.tsv"
+
+    python3 "${DEMUX_SCRIPT}" \
+      --r1 "${R1}" \
+      --r2 "${R2}" \
+      --sample "${SAMPLE}" \
+      --outdir "${SAMPLE_DEMUX}" \
+      --summary "${SAMPLE_SUMMARY}"
+
+    tail -n +2 "${SAMPLE_SUMMARY}" >> "${GLOBAL_COUNTS}"
+
+    for MODALITY in H3K27m3 H3K27ac; do
+        NREADS=$(awk -v s="${SAMPLE}" -v m="${MODALITY}" '$1==s && $2==m {print $3}' "${SAMPLE_SUMMARY}")
+
+        if [[ -z "${NREADS}" || "${NREADS}" == "0" ]]; then
+            echo "Skipping ${SAMPLE} ${MODALITY} (0 reads)"
+            continue
+        fi
+
+        echo "--- ${SAMPLE} ${MODALITY} ---"
+
+        DEMUX_R1="${SAMPLE_DEMUX}/${SAMPLE}_${MODALITY}_R1.fastq.gz"
+        DEMUX_R2="${SAMPLE_DEMUX}/${SAMPLE}_${MODALITY}_R2.fastq.gz"
+
+        TRIM_R1="${SAMPLE_TRIM}/${SAMPLE}_${MODALITY}_R1.trimmed.fastq.gz"
+        TRIM_R2="${SAMPLE_TRIM}/${SAMPLE}_${MODALITY}_R2.trimmed.fastq.gz"
+
+        RAW_BAM="${SAMPLE_BAM}/${SAMPLE}_${MODALITY}.raw.bam"
+        SORTED_BAM="${SAMPLE_BAM}/${SAMPLE}_${MODALITY}.sorted.bam"
+        FILTERED_BAM="${SAMPLE_BAM}/${SAMPLE}_${MODALITY}.filtered.bam"
+        NAMESORT_BAM="${SAMPLE_TMP}/${SAMPLE}_${MODALITY}.namesorted.bam"
+        FRAG_BED="${SAMPLE_TMP}/${SAMPLE}_${MODALITY}.fragments.bed"
+        CHROMSIZES="${SAMPLE_TMP}/${SAMPLE}_${MODALITY}.chrom.sizes"
+        WINDOWS="${SAMPLE_TMP}/${SAMPLE}_${MODALITY}.10kb_windows.bed"
+
+        BIGWIG="${SAMPLE_BW}/${SAMPLE}_${MODALITY}.CPM.bw"
+        BINTSV="${SAMPLE_BINS}/${SAMPLE}_${MODALITY}.10kb_counts.tsv"
+
+        cutadapt \
+          -j "${THREADS}" \
+          -u 27 \
+          -U 19 \
+          -o "${TRIM_R1}" \
+          -p "${TRIM_R2}" \
+          "${DEMUX_R1}" "${DEMUX_R2}" \
+          > "${SAMPLE_COUNTS}/${SAMPLE}_${MODALITY}.cutadapt.log"
+
+        bowtie2 \
+          -x "${REF}" \
+          -1 "${TRIM_R1}" \
+          -2 "${TRIM_R2}" \
+          --threads "${THREADS}" \
+          --no-mixed \
+          --no-discordant \
+          2> "${SAMPLE_COUNTS}/${SAMPLE}_${MODALITY}.bowtie2.log" \
+          | samtools view -@ "${THREADS}" -b -o "${RAW_BAM}" -
+
+        samtools sort -@ "${THREADS}" -o "${SORTED_BAM}" "${RAW_BAM}"
+
+        samtools view \
+          -@ "${THREADS}" \
+          -b \
+          -f 2 \
+          -F 2304 \
+          -q 30 \
+          "${SORTED_BAM}" \
+          | samtools sort -@ "${THREADS}" -o "${FILTERED_BAM}" -
+
+        samtools index "${FILTERED_BAM}"
+
+        bamCoverage \
+          -b "${FILTERED_BAM}" \
+          -o "${BIGWIG}" \
+          --normalizeUsing CPM \
+          -p "${THREADS}"
+
+        samtools view -H "${FILTERED_BAM}" \
+          | awk 'BEGIN{OFS="\t"} /^@SQ/ {sn=""; ln=""; for(i=1;i<=NF;i++){if($i~/^SN:/){sn=substr($i,4)} else if($i~/^LN:/){ln=substr($i,4)}} if(sn!="" && ln!="") print sn, ln}' \
+          > "${CHROMSIZES}"
+
+        bedtools makewindows \
+          -g "${CHROMSIZES}" \
+          -w 10000 \
+          > "${WINDOWS}"
+
+        samtools sort -n -@ "${THREADS}" -o "${NAMESORT_BAM}" "${FILTERED_BAM}"
+
+        bedtools bamtobed -bedpe -i "${NAMESORT_BAM}" \
+          | awk 'BEGIN{OFS="\t"} $1==$4 && $2<$6 {print $1,$2,$6}' \
+          | sort -k1,1 -k2,2n \
+          > "${FRAG_BED}"
+
+        bedtools coverage \
+          -a "${WINDOWS}" \
+          -b "${FRAG_BED}" \
+          -counts \
+          > "${BINTSV}"
+
+        rm -f "${RAW_BAM}" "${SORTED_BAM}" "${NAMESORT_BAM}" "${FRAG_BED}" "${CHROMSIZES}" "${WINDOWS}"
+    done
+done
+
+echo "Pipeline finished."
+EOF
+
+
+-----
+
+chmod +x /cfs/klemming/scratch/p/phunold/BPA4/scripts/run_mamuplex_pipeline.sh
+
+------
+sbatch /cfs/klemming/scratch/p/phunold/BPA4/scripts/run_mamuplex_pipeline.sh

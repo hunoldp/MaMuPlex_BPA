@@ -11,6 +11,7 @@ import os
 BARCODES = {
     "GTGATGCT": "H3K27m3",
     "CCTATAGC": "H3K27ac",
+    "GTACATGC": "IgG",
 }
 
 def gzopen(path, mode):
@@ -68,19 +69,16 @@ def main():
 
     with open(args.summary, "w") as out:
         out.write("sample\tmodality\tread_pairs\n")
-        for modality in ["H3K27m3", "H3K27ac", "unassigned"]:
+        for modality in ["H3K27m3", "H3K27ac", "IgG", "unassigned"]:
             out.write(f"{args.sample}\t{modality}\t{counts[modality]}\n")
 
 if __name__ == "__main__":
     main()
 EOF
 
-
-
 ------
 
 chmod +x /cfs/klemming/scratch/p/phunold/BPA6/scripts/demux_exact_r1_barcode.py
-
 
 ------
 
@@ -159,7 +157,7 @@ for R1 in ${FASTQ_DIR}/Sample_*_L01_R1.fastq.gz; do
 
     tail -n +2 "${SAMPLE_SUMMARY}" >> "${GLOBAL_COUNTS}"
 
-    for MODALITY in H3K27m3 H3K27ac; do
+    for MODALITY in H3K27m3 H3K27ac IgG; do
         NREADS=$(awk -v s="${SAMPLE}" -v m="${MODALITY}" '$1==s && $2==m {print $3}' "${SAMPLE_SUMMARY}")
 
         if [[ -z "${NREADS}" || "${NREADS}" == "0" ]]; then
@@ -253,8 +251,7 @@ done
 echo "Pipeline finished."
 EOF
 
-
------
+------
 
 chmod +x /cfs/klemming/scratch/p/phunold/BPA6/scripts/run_mamuplex_pipeline.sh
 
